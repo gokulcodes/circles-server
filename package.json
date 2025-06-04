@@ -1,0 +1,27 @@
+{
+  "name": "circles-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "node --watch dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gokulcodes/circles-server.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gokulcodes/circles-server/issues"
+  },
+  "homepage": "https://github.com/gokulcodes/circles-server#readme",
+  "dependencies": {
+    "@apollo/server": "^4.12.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
