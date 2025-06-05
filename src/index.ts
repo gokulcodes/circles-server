@@ -1,59 +1,92 @@
+import http from "http";
+import cors from "cors";
+import express from "express";
+import { WebSocketServer } from "ws";
+import { useServer } from "graphql-ws/use/ws";
+import { PubSub } from "graphql-subscriptions";
+import { ExecutionArgs, parse } from "graphql";
 import { ApolloServer } from "@apollo/server";
-import { startStandaloneServer } from "@apollo/server/standalone";
+import { expressMiddleware } from "@as-integrations/express5";
+import { makeExecutableSchema } from "@graphql-tools/schema";
 import typeDefs from "./typeDefs.js";
 import resolvers from "./resolvers.js";
 
-const server = new ApolloServer({
+const pubsub = new PubSub();
+const PORT = 3000;
+const schema = makeExecutableSchema({
   typeDefs,
   resolvers,
 });
+const app = express();
+const httpServer = http.createServer(app);
 
-const { url } = await startStandaloneServer(server, {
-  listen: { port: 3000 },
+const wsServer = new WebSocketServer({
+  server: httpServer,
+  path: "/graphql",
 });
-console.log("Starting server: ", url);
 
-// app.use(cors());
-// app.use(express.json());
+useServer(
+  {
+    schema,
+    onSubscribe: async (_, __, payload) => {
+      const args: ExecutionArgs = {
+        schema,
+        operationName: payload.operationName,
+        document: parse(payload.query),
+        variableValues: payload.variables,
+        contextValue: { pubsub },
+      };
+      return args;
+    },
+  },
+  wsServer
+);
 
-// app.use(
-//   "/graphql", // Apply middleware only to the /graphql path
-//   cors<cors.CorsRequest>(),
-//   // Use express.json() for parsing application/json bodies
-//   // If you're on an older Express version or prefer it, you can use `json()` from 'body-parser'
-//   express.json(), // This is the middleware that populates req.body
-//   expressMiddleware(server, {
-//     context: async ({ req }) => ({ token: req.headers.token as string }),
-//   })
-// );
+const server = new ApolloServer({
+  schema,
+});
 
-// const httpServer = http.createServer(app);
-// app.get(
-//   "/",
-//   // cors<cors.CorsRequest>(),
-//   // express.json(),
-//   // (req, res) => {
-//   //   res.setHeader("Content-Type", "text/event-stream");
-//   //   res.setHeader("Cache-Control", "no-cache");
-//   //   res.setHeader("Connection", "kee-alive");
+await server.start();
 
-//   //   // res.write("SSE Established");
+app.use(
+  "/graphql",
+  cors(),
+  express.json(),
+  expressMiddleware(server, {
+    context: async ({ req }) => {
+      return { pubsub, token: req.headers.token as string };
+    },
+  })
+);
 
-//   //   let intervalId;
-//   //   let count = 0;
-//   //   intervalId = setInterval(() => {
-//   //     res.write(`Counter: ${count}`);
-//   //     count++;
-//   //   }, 2000);
+app.get(
+  "/eventstream",
+  cors<cors.CorsRequest>(),
+  express.json(),
+  (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
 
-//   //   res.on("close", () => {
-//   //     clearInterval(intervalId);
-//   //     res.end();
-//   //   });
+    // res.write("SSE Established");
 
-//   //   // res.send("Circles");
-//   // },
-//   expressMiddleware(server)
-// );
+    let intervalId;
+    let count = 0;
+    intervalId = setInterval(() => {
+      res.write(`Counter: ${count}`);
+      count++;
+    }, 2000);
 
-// httpServer.listen(3000);
+    res.on("close", () => {
+      clearInterval(intervalId);
+      res.end();
+    });
+
+    // res.send("Circles");
+  }
+);
+
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
+  console.log(`📡 Subscriptions ready at ws://localhost:${PORT}/graphql`);
+});

@@ -19,9 +19,19 @@
   },
   "homepage": "https://github.com/gokulcodes/circles-server#readme",
   "dependencies": {
-    "@apollo/server": "^4.12.2"
+    "@apollo/server": "^4.12.2",
+    "@as-integrations/express5": "^1.0.0",
+    "@graphql-tools/schema": "^10.0.23",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "graphql": "^16.11.0",
+    "graphql-subscriptions": "^3.0.0",
+    "graphql-ws": "^6.0.5",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.8.3"
   }
 }
