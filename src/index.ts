@@ -48,8 +48,7 @@ const server = new ApolloServer({
   schema,
 });
 
-const MONGO_URI =
-  "mongodb+srv://circleAdmin:BTc7yLpnn5FnNc2r@circleschat.ghjr3jd.mongodb.net/circles?retryWrites=true&w=majority&appName=circlesChat";
+const MONGO_URI = process.env.MONGO_URI;
 
 mongoose
   .connect(MONGO_URI)
