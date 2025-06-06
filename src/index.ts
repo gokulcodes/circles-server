@@ -10,6 +10,7 @@ import { expressMiddleware } from "@as-integrations/express5";
 import { makeExecutableSchema } from "@graphql-tools/schema";
 import typeDefs from "./typeDefs.js";
 import resolvers from "./resolvers.js";
+import mongoose from "mongoose";
 
 const pubsub = new PubSub();
 const PORT = 3000;
@@ -17,6 +18,7 @@ const schema = makeExecutableSchema({
   typeDefs,
   resolvers,
 });
+
 const app = express();
 const httpServer = http.createServer(app);
 
@@ -46,47 +48,57 @@ const server = new ApolloServer({
   schema,
 });
 
-await server.start();
+const MONGO_URI =
+  "mongodb+srv://circleAdmin:BTc7yLpnn5FnNc2r@circleschat.ghjr3jd.mongodb.net/circles?retryWrites=true&w=majority&appName=circlesChat";
 
-app.use(
-  "/graphql",
-  cors(),
-  express.json(),
-  expressMiddleware(server, {
-    context: async ({ req }) => {
-      return { pubsub, token: req.headers.token as string };
-    },
-  })
-);
+mongoose
+  .connect(MONGO_URI)
+  .then(async () => {
+    console.log("Connected to MongoDB");
+    await server.start();
+    app.use(
+      "/graphql",
+      cors(),
+      express.json(),
+      expressMiddleware(server, {
+        context: async ({ req }) => {
+          return { pubsub, token: req.headers.token as string };
+        },
+      })
+    );
 
-app.get(
-  "/eventstream",
-  cors<cors.CorsRequest>(),
-  express.json(),
-  (req, res) => {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    app.get(
+      "/eventstream",
+      cors<cors.CorsRequest>(),
+      express.json(),
+      (req, res) => {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
 
-    // res.write("SSE Established");
+        // res.write("SSE Established");
 
-    let intervalId;
-    let count = 0;
-    intervalId = setInterval(() => {
-      res.write(`Counter: ${count}`);
-      count++;
-    }, 2000);
+        let intervalId;
+        let count = 0;
+        intervalId = setInterval(() => {
+          res.write(`Counter: ${count}`);
+          count++;
+        }, 2000);
 
-    res.on("close", () => {
-      clearInterval(intervalId);
-      res.end();
+        res.on("close", () => {
+          clearInterval(intervalId);
+          res.end();
+        });
+
+        // res.send("Circles");
+      }
+    );
+
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
+      console.log(`📡 Subscriptions ready at ws://localhost:${PORT}/graphql`);
     });
-
-    // res.send("Circles");
-  }
-);
-
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`);
-  console.log(`📡 Subscriptions ready at ws://localhost:${PORT}/graphql`);
-});
+  })
+  .catch((err) => {
+    console.error("Error connecting to MongoDB:", err);
+  });
