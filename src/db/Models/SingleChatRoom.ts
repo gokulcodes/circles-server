@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const singleChatRoomSchema = new Schema(
   {
-    members: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
+    members: [{ type: String, ref: "User", required: true }],
   },
   { timestamps: true }
 );

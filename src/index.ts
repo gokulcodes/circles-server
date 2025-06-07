@@ -11,9 +11,12 @@ import { makeExecutableSchema } from "@graphql-tools/schema";
 import typeDefs from "./typeDefs.js";
 import resolvers from "./resolvers.js";
 import mongoose from "mongoose";
+import dotenv from "dotenv";
+import { isUserAuthCheckRequired, verifyAuthToken } from "./utils/index.js";
+dotenv.config();
 
 const pubsub = new PubSub();
-const PORT = 3000;
+const PORT = 4000;
 const schema = makeExecutableSchema({
   typeDefs,
   resolvers,
@@ -48,7 +51,7 @@ const server = new ApolloServer({
   schema,
 });
 
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || "";
 
 mongoose
   .connect(MONGO_URI)
@@ -61,10 +64,32 @@ mongoose
       express.json(),
       expressMiddleware(server, {
         context: async ({ req }) => {
-          return { pubsub, token: req.headers.token as string };
+          if (isUserAuthCheckRequired(parse(req.body.query))) {
+            // console.log("User auth check required", req.headers.authorization);
+            const userEmail = await verifyAuthToken(
+              req.headers.authorization as string
+            );
+            if (!userEmail || !req.headers.authorization) {
+              throw new Error("Unauthorized");
+            }
+            return { pubsub, userEmail };
+          }
+          return { pubsub };
         },
       })
     );
+
+    // app.get("/isAuthorized", async (req, res) => {
+    //   const token = req.headers.authorization;
+    //   if (!token) {
+    //     return res.status(401).json({ error: "Unauthorized" });
+    //   }
+    //   const userEmail = await verifyAuthToken(token);
+    //   if (!userEmail) {
+    //     return res.status(401).json({ error: "Unauthorized" });
+    //   }
+    //   return res.status(200).json({ email: userEmail });
+    // });
 
     app.get(
       "/eventstream",

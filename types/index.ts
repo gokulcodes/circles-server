@@ -1,4 +1,12 @@
-export type Book = {
-  title: string;
-  author: string;
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type Context = {
+  userEmail: string;
+  pubsub: any;
 };

@@ -2,11 +2,16 @@ import mongoose, { Schema } from "mongoose";
 
 const messageSchema = new Schema(
   {
-    sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    sender: { type: String, ref: "User", required: true },
     content: { type: String, required: true },
-    replyTo: { type: Schema.Types.ObjectId, ref: "Message" },
-    roomId: { type: Schema.Types.ObjectId, ref: "ChatRoom", required: true },
-    reaction: [{ type: String }],
+    replyTo: { type: String, ref: "Message" },
+    roomId: { type: String, ref: "ChatRoom", required: true },
+    reactions: [
+      {
+        senderEmail: { type: String, ref: "User" },
+        reactionString: { type: String },
+      },
+    ],
   },
   { timestamps: true }
 );
