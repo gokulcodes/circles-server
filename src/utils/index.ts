@@ -3,7 +3,7 @@ import FriendRequest from "../db/Models/FriendRequest.js";
 import jwt from "jsonwebtoken";
 import { DocumentNode } from "graphql";
 
-async function verifyAuthToken(token: string): Promise<boolean> {
+async function verifyAuthToken(token: string): Promise<string> {
   // Function to verify the authentication token
   try {
     let decodedInfo = await jwt.verify(token, process.env.JWT_SECRET || "");
@@ -14,7 +14,7 @@ async function verifyAuthToken(token: string): Promise<boolean> {
     return decodedInfo.userEmail;
   } catch (error) {
     console.error("Token verification failed:", error);
-    return false;
+    return "";
   }
 }
 

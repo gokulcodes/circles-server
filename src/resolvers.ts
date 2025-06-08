@@ -10,6 +10,7 @@ import {
 import FriendRequest from "./db/Models/FriendRequest.js";
 import GroupChatRoom from "./db/Models/GroupChatRoom.js";
 import type { Context } from "../types/index.js";
+import { Schema, Types } from "mongoose";
 
 const resolvers = {
   Query: {
@@ -35,11 +36,67 @@ const resolvers = {
     ) => {
       const user = await User.findOne({ email: context.userEmail });
       if (!user) throw new Error("User not found");
-      const chatRooms = await SingleChatRoom.find({
-        members: { $in: [user.email] },
-      });
-      if (!chatRooms) throw new Error("Chat rooms not found");
+      const chatRooms = await SingleChatRoom.aggregate([
+        {
+          $match: {
+            members: {
+              $elemMatch: {
+                email: context.userEmail,
+              },
+            },
+          },
+        },
+        // {
+        //   $addFields: {
+        //     members: {
+        //       $filter: {
+        //         input: "$members",
+        //         as: "member",
+        //         cond: {
+        //           $ne: ["$$member.email", context.userEmail],
+        //         },
+        //       },
+        //     },
+        //   },
+        // },
+      ]);
+      if (!chatRooms?.length) throw new Error("Chat rooms not found");
       return chatRooms;
+    },
+    getAllFriendRequest: async (_: unknown, __: unknown, context: Context) => {
+      const allRequest = await FriendRequest.aggregate([
+        { $match: { receiver: context.userEmail } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "sender",
+            foreignField: "email",
+            as: "senderInfo",
+          },
+        },
+        { $unwind: { path: "$senderInfo" } },
+      ]);
+      return allRequest;
+    },
+  },
+  // ChatRoom: {
+  //   members: async (parent: any, _: unknown, context: Context) => {
+  //     return await User.find({
+  //       email: {
+  //         $in: parent.members
+  //           .filter((member: any) => member.email !== context.userEmail)
+  //           .map((mem: any) => mem.email),
+  //       },
+  //     });
+  //   },
+  // },
+  ChatRoomUserActivity: {
+    user: async (parent: any, __: unknown, context: { userEmail: string }) => {
+      // if (parent.email === context.userEmail) return;
+      return await User.findOne({ email: parent.email });
+    },
+    isTyping: (parent: any) => {
+      return parent.isTyping;
     },
   },
   User: {
@@ -107,11 +164,13 @@ const resolvers = {
         const user = await User.findOne({ email: context.userEmail });
         if (!user) throw new Error("User not found");
         // Validate old password
+        console.log(user);
         const isValid = await comparePasswords(args.oldPassword, user.password);
         if (!isValid) throw new Error("Invalid old password");
         // Hash new password
         user.password = await hashPassword(args.newPassword);
         await user.save();
+        return user;
       } catch (error: any) {
         throw new Error(`Change password failed: ${error.message}`);
       }
@@ -149,6 +208,9 @@ const resolvers = {
         if (!user) throw new Error("User not found");
         const friend = await User.findOne({ email: args.friendEmail });
         if (!friend) throw new Error("Friend not found");
+        if (user.email === friend.email) {
+          throw new Error("You can't add yourself as a friend");
+        }
         // Create a friend request (you'll need to implement this)
         await createFriendRequest(user.email, friend.email);
         return "Friend request sent";
@@ -185,11 +247,14 @@ const resolvers = {
         await friend.save();
         // Optionally, create a chat room for the two users
         const chatRoom = await SingleChatRoom.findOne({
-          members: { $all: [user.email, friend.email] },
+          members: { $all: [{ email: user.email }, { email: friend.email }] },
         });
         if (!chatRoom) {
           await SingleChatRoom.create({
-            members: [user.email, friend.email],
+            members: [
+              { email: user.email, isTyping: false },
+              { email: friend.email, isTyping: false },
+            ],
           });
         }
         return "Friend request accepted";
@@ -311,37 +376,58 @@ const resolvers = {
         throw new Error(`Clear history failed: ${error.message}`);
       }
     },
-    updateLastSeen: async (
+    updateUserStatus: async (
       _: any,
-      args: { lastSeen: string },
+      args: { isOnline: boolean; lastSeen: string },
       context: Context
     ) => {
       try {
-        const lastSeenDate = new Date(args.lastSeen);
+        const lastSeenDate = new Date(parseInt(args.lastSeen));
         const user = await User.findOneAndUpdate(
           { email: context.userEmail },
-          { lastSeen: lastSeenDate },
+          { isOnline: args.isOnline, lastSeen: lastSeenDate },
           { new: true }
         );
         if (!user) throw new Error("User not found");
+        await user.save();
+        const { pubsub } = context;
+        pubsub.publish(user.email, { userActivityStatus: user });
         return user;
       } catch (error: any) {
-        throw new Error(`Update last seen failed: ${error.message}`);
+        throw new Error(`Update online status failed: ${error.message}`);
       }
     },
-    updateOnlineStatus: async (
+    updateIsTyping: async (
       _: any,
-      args: { isOnline: boolean },
+      args: { roomId: string; isTyping: boolean },
       context: Context
     ) => {
       try {
-        const user = await User.findOneAndUpdate(
-          { email: context.userEmail },
-          { online: args.isOnline },
+        await SingleChatRoom.findOneAndUpdate(
+          { _id: args.roomId, "members.email": context.userEmail },
+          { $set: { "members.$.isTyping": args.isTyping } },
           { new: true }
         );
-        if (!user) throw new Error("User not found");
-        return user;
+        const roomId = new Types.ObjectId(args.roomId); // make sure it’s an ObjectId
+        const [room] = await SingleChatRoom.aggregate([
+          { $match: { _id: roomId } },
+          // {
+          //   $set: {
+          //     // or $project
+          //     members: {
+          //       $filter: {
+          //         input: "$members",
+          //         as: "member",
+          //         cond: { $ne: ["$$member.email", context.userEmail] },
+          //       },
+          //     },
+          //   },
+          // },
+        ]);
+        console.log(room);
+        const { pubsub } = context;
+        pubsub.publish(args.roomId, { roomActivity: room });
+        return room;
       } catch (error: any) {
         throw new Error(`Update online status failed: ${error.message}`);
       }
@@ -548,7 +634,31 @@ const resolvers = {
       ) => {
         console.log("Subscription started for roomId:", args.roomId);
         const { pubsub } = context;
-        // pubsub.asyncIterableIterator([args.roomId]);
+        return pubsub.asyncIterableIterator([args.roomId]);
+      },
+    },
+    userActivityStatus: {
+      subscribe: (
+        _: unknown,
+        __: unknown,
+        context: { userEmail: string; pubsub: any }
+      ) => {
+        console.log(
+          "Subscription started for User Activity:",
+          context.userEmail
+        );
+        const { pubsub } = context;
+        return pubsub.asyncIterableIterator([context.userEmail]);
+      },
+    },
+    roomActivity: {
+      subscribe: (
+        _: unknown,
+        args: { roomId: string },
+        context: { userEmail: string; pubsub: any }
+      ) => {
+        console.log("Subscription started for Room Activity:", args.roomId);
+        const { pubsub } = context;
         return pubsub.asyncIterableIterator([args.roomId]);
       },
     },

@@ -6,7 +6,7 @@ const typeDefs = `#graphql
     about: String
     profilePicture: String
     isOnline: Boolean
-    isTyping: Boolean
+    # isTyping: Boolean
     lastSeen: String
     friends: [MyFriends!]!
     blockedUsers: [String!]!
@@ -30,10 +30,15 @@ const typeDefs = `#graphql
     reactions: [Reaction]
   }
 
+  type ChatRoomUserActivity{
+    user: User!
+    isTyping: Boolean!
+  }
+
   type ChatRoom {
     _id: String
     name: String
-    members: [String!]!
+    members: [ChatRoomUserActivity!]!
     isGroupChat: Boolean!
   }
 
@@ -49,18 +54,25 @@ const typeDefs = `#graphql
     refreshToken: String!
   }
 
+  type FriendRequest {
+    sender: String!
+    receiver: String!
+    senderInfo: User!
+  }
+
   type Query {
     getAllUsers: [User!]!
     getUserByEmail: User
     getChatRoomInfo(roomId: String!): ChatRoom
     getMessagesByRoom(roomId: String!): [Message!]!
     getAllChatRoomsByUser: [ChatRoom!]!
+    getAllFriendRequest: [FriendRequest]
   }
 
   type Mutation {
     userSignup(email: String!, password: String!, username: String!): User!
     userLogin(email: String!, password: String!): UserAuthResponse!
-    changePassword(oldPassword: String!, newPassword: String!): UserAuthResponse!
+    changePassword(oldPassword: String!, newPassword: String!): User!
     updateAbout(about: String!): User!
     deleteAccount: String!
 
@@ -77,9 +89,8 @@ const typeDefs = `#graphql
 
     deleteMessage(messageId: ID!): String!
     clearHistory(roomId: String!): String!
-    updateLastSeen(lastSeen: String!): User!
-    updateIsTyping(isTyping: Boolean!): User!
-    updateOnlineStatus(isOnline: Boolean!): User!
+    updateIsTyping(roomId: String!, isTyping: Boolean!): ChatRoom!
+    updateUserStatus(isOnline: Boolean!, lastSeen: String!): User!
 
     createGroupChatRoom(name: String!, members: [String!]!): ChatRoom!
     addFriendToGroupChat(roomId: String!, memberEmail: String!): ChatRoom!
@@ -102,6 +113,8 @@ const typeDefs = `#graphql
 
   type Subscription {
     broadcast(roomId: String!): Message
+    userActivityStatus: User
+    roomActivity(roomId: String!): ChatRoom
   }
 
 `;

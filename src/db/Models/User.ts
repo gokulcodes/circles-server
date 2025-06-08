@@ -9,7 +9,7 @@ const userSchema = new Schema(
     profilePicture: { type: String, default: "" },
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date, default: Date.now },
-    isTyping: { type: Boolean, default: false },
+    // isTyping: { type: Boolean, default: false },
     blockedUsers: [{ type: String, ref: "User" }],
     friends: [{ type: String, ref: "User" }],
   },

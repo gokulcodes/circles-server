@@ -33,13 +33,29 @@ const wsServer = new WebSocketServer({
 useServer(
   {
     schema,
-    onSubscribe: async (_, __, payload) => {
+    onSubscribe: async (ctx, __, payload) => {
+      let context = { pubsub, userEmail: "" };
+      if (
+        ctx.connectionParams &&
+        isUserAuthCheckRequired(parse(payload.query))
+      ) {
+        // console.log("User auth check required", req.headers.authorization);
+        const userEmail = await verifyAuthToken(
+          ctx.connectionParams.Authorization as string
+        );
+        if (!userEmail || !ctx.connectionParams.Authorization) {
+          throw new Error("Unauthorized");
+        }
+
+        context = { pubsub, userEmail };
+      }
+      // console.log(context);
       const args: ExecutionArgs = {
         schema,
         operationName: payload.operationName,
         document: parse(payload.query),
         variableValues: payload.variables,
-        contextValue: { pubsub },
+        contextValue: context,
       };
       return args;
     },
@@ -65,13 +81,13 @@ mongoose
       expressMiddleware(server, {
         context: async ({ req }) => {
           if (isUserAuthCheckRequired(parse(req.body.query))) {
-            // console.log("User auth check required", req.headers.authorization);
             const userEmail = await verifyAuthToken(
               req.headers.authorization as string
             );
             if (!userEmail || !req.headers.authorization) {
               throw new Error("Unauthorized");
             }
+
             return { pubsub, userEmail };
           }
           return { pubsub };

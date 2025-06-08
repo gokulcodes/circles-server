@@ -2,7 +2,18 @@ import mongoose, { Schema } from "mongoose";
 
 const singleChatRoomSchema = new Schema(
   {
-    members: [{ type: String, ref: "User", required: true }],
+    members: [
+      {
+        email: {
+          type: String,
+          ref: "User",
+          required: true,
+        },
+        isTyping: {
+          type: Boolean,
+        },
+      },
+    ],
   },
   { timestamps: true }
 );
