@@ -67,6 +67,7 @@ const typeDefs = `#graphql
     getMessagesByRoom(roomId: String!): [Message!]!
     getAllChatRoomsByUser: [ChatRoom!]!
     getAllFriendRequest: [FriendRequest]
+    getFriendInfoByEmail: [User]
   }
 
   type Mutation {
@@ -76,6 +77,7 @@ const typeDefs = `#graphql
     updateAbout(about: String!): User!
     deleteAccount: String!
 
+    cancelFriendRequest(friendEmail: String!): String!
     makeFriendRequest(friendEmail: String!): String!
     acceptFriendRequest(friendEmail: String!): String!
     blockAUser(userEmail: String!): String!
@@ -113,8 +115,9 @@ const typeDefs = `#graphql
 
   type Subscription {
     broadcast(roomId: String!): Message
-    userActivityStatus: User
+    userActivityStatus(email: String!): User
     roomActivity(roomId: String!): ChatRoom
+    friendRequestActivities(email: String!): [FriendRequest]
   }
 
 `;

@@ -39,7 +39,6 @@ useServer(
         ctx.connectionParams &&
         isUserAuthCheckRequired(parse(payload.query))
       ) {
-        // console.log("User auth check required", req.headers.authorization);
         const userEmail = await verifyAuthToken(
           ctx.connectionParams.Authorization as string
         );
@@ -49,7 +48,6 @@ useServer(
 
         context = { pubsub, userEmail };
       }
-      // console.log(context);
       const args: ExecutionArgs = {
         schema,
         operationName: payload.operationName,
@@ -84,6 +82,7 @@ mongoose
             const userEmail = await verifyAuthToken(
               req.headers.authorization as string
             );
+
             if (!userEmail || !req.headers.authorization) {
               throw new Error("Unauthorized");
             }

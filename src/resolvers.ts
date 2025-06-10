@@ -29,6 +29,11 @@ const resolvers = {
       if (!messages) throw new Error("Messages not found");
       return messages;
     },
+    getFriendInfoByEmail: async (_: unknown, args: { friendEmail: string }) => {
+      const user = await User.findOne({ email: args.friendEmail });
+      if (!user) throw new Error("Friend not found");
+      return user;
+    },
     getAllChatRoomsByUser: async (
       _: unknown,
       __: unknown,
@@ -65,7 +70,14 @@ const resolvers = {
     },
     getAllFriendRequest: async (_: unknown, __: unknown, context: Context) => {
       const allRequest = await FriendRequest.aggregate([
-        { $match: { receiver: context.userEmail } },
+        {
+          $match: {
+            $or: [
+              { receiver: context.userEmail },
+              { sender: context.userEmail },
+            ],
+          },
+        },
         {
           $lookup: {
             from: "users",
@@ -213,6 +225,22 @@ const resolvers = {
         }
         // Create a friend request (you'll need to implement this)
         await createFriendRequest(user.email, friend.email);
+        const allRequest = await FriendRequest.aggregate([
+          { $match: { receiver: context.userEmail } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        const { pubsub } = context;
+        pubsub.publish(context.userEmail, {
+          friendRequestActivities: allRequest,
+        });
         return "Friend request sent";
       } catch (error: any) {
         throw new Error(`Make friend request failed: ${error.message}`);
@@ -257,7 +285,62 @@ const resolvers = {
             ],
           });
         }
+        const allRequest = await FriendRequest.aggregate([
+          { $match: { receiver: context.userEmail } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        const { pubsub } = context;
+        pubsub.publish(context.userEmail, {
+          friendRequestActivities: allRequest,
+        });
         return "Friend request accepted";
+      } catch (error: any) {
+        throw new Error(`Accept friend request failed: ${error.message}`);
+      }
+    },
+    cancelFriendRequest: async (
+      _: any,
+      args: { friendEmail: string },
+      context: Context
+    ) => {
+      try {
+        const isFriendRequestExist = await FriendRequest.findOne({
+          sender: context.userEmail,
+          receiver: args.friendEmail,
+        });
+        if (!isFriendRequestExist) {
+          throw new Error("Friend request does not exist");
+        }
+        // Remove the friend request
+        await FriendRequest.deleteOne({
+          sender: context.userEmail,
+          receiver: args.friendEmail,
+        });
+        const allRequest = await FriendRequest.aggregate([
+          { $match: { receiver: context.userEmail } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        const { pubsub } = context;
+        pubsub.publish(context.userEmail, {
+          friendRequestActivities: allRequest,
+        });
+        return "Friend request cancelled";
       } catch (error: any) {
         throw new Error(`Accept friend request failed: ${error.message}`);
       }
@@ -640,15 +723,12 @@ const resolvers = {
     userActivityStatus: {
       subscribe: (
         _: unknown,
-        __: unknown,
+        args: { email: string },
         context: { userEmail: string; pubsub: any }
       ) => {
-        console.log(
-          "Subscription started for User Activity:",
-          context.userEmail
-        );
+        console.log("Subscription started for User Activity:", args.email);
         const { pubsub } = context;
-        return pubsub.asyncIterableIterator([context.userEmail]);
+        return pubsub.asyncIterableIterator([args.email]);
       },
     },
     roomActivity: {
@@ -660,6 +740,20 @@ const resolvers = {
         console.log("Subscription started for Room Activity:", args.roomId);
         const { pubsub } = context;
         return pubsub.asyncIterableIterator([args.roomId]);
+      },
+    },
+    friendRequestActivities: {
+      subscribe: (
+        _: unknown,
+        args: { email: string },
+        context: { userEmail: string; pubsub: any }
+      ) => {
+        console.log(
+          "Subscription started for Friend request Activity:",
+          args.email
+        );
+        const { pubsub } = context;
+        return pubsub.asyncIterableIterator([args.email]);
       },
     },
   },
