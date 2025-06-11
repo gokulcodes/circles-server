@@ -81,11 +81,20 @@ const resolvers = {
         {
           $lookup: {
             from: "users",
+            localField: "receiver",
+            foreignField: "email",
+            as: "receiverInfo",
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
             localField: "sender",
             foreignField: "email",
             as: "senderInfo",
           },
         },
+        { $unwind: { path: "$receiverInfo" } },
         { $unwind: { path: "$senderInfo" } },
       ]);
       return allRequest;
@@ -134,6 +143,12 @@ const resolvers = {
         // Hash password (assuming you have a method to hash passwords)
         user.password = await hashPassword(args.password);
         await user.save();
+        await SingleChatRoom.create({
+          members: [
+            { email: user.email, isTyping: false },
+            { email: process.env.CIRCLE_AI_EMAIL, isTyping: false },
+          ],
+        });
         return user;
       } catch (error: any) {
         throw new Error(`Signup failed: ${error.message}`);
@@ -226,7 +241,22 @@ const resolvers = {
         // Create a friend request (you'll need to implement this)
         await createFriendRequest(user.email, friend.email);
         const allRequest = await FriendRequest.aggregate([
-          { $match: { receiver: context.userEmail } },
+          {
+            $match: {
+              $or: [
+                { receiver: context.userEmail },
+                { sender: context.userEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
           {
             $lookup: {
               from: "users",
@@ -235,11 +265,43 @@ const resolvers = {
               as: "senderInfo",
             },
           },
+          { $unwind: { path: "$receiverInfo" } },
           { $unwind: { path: "$senderInfo" } },
         ]);
         const { pubsub } = context;
         pubsub.publish(context.userEmail, {
           friendRequestActivities: allRequest,
+        });
+        const allFriendsRequest = await FriendRequest.aggregate([
+          {
+            $match: {
+              $or: [
+                { receiver: args.friendEmail },
+                { sender: args.friendEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$receiverInfo" } },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        pubsub.publish(args.friendEmail, {
+          friendRequestActivities: allFriendsRequest,
         });
         return "Friend request sent";
       } catch (error: any) {
@@ -286,7 +348,22 @@ const resolvers = {
           });
         }
         const allRequest = await FriendRequest.aggregate([
-          { $match: { receiver: context.userEmail } },
+          {
+            $match: {
+              $or: [
+                { receiver: context.userEmail },
+                { sender: context.userEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
           {
             $lookup: {
               from: "users",
@@ -295,15 +372,133 @@ const resolvers = {
               as: "senderInfo",
             },
           },
+          { $unwind: { path: "$receiverInfo" } },
           { $unwind: { path: "$senderInfo" } },
         ]);
         const { pubsub } = context;
         pubsub.publish(context.userEmail, {
           friendRequestActivities: allRequest,
         });
+        const allFriendsRequest = await FriendRequest.aggregate([
+          {
+            $match: {
+              $or: [
+                { receiver: args.friendEmail },
+                { sender: args.friendEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$receiverInfo" } },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        pubsub.publish(args.friendEmail, {
+          friendRequestActivities: allFriendsRequest,
+        });
         return "Friend request accepted";
       } catch (error: any) {
         throw new Error(`Accept friend request failed: ${error.message}`);
+      }
+    },
+    declineFriendRequest: async (
+      _: any,
+      args: { friendEmail: string },
+      context: Context
+    ) => {
+      try {
+        const isFriendRequestExist = await FriendRequest.findOne({
+          sender: context.userEmail,
+          receiver: args.friendEmail,
+        });
+        if (!isFriendRequestExist) {
+          throw new Error("Friend request does not exist");
+        }
+        // Remove the friend request
+        await FriendRequest.deleteOne({
+          sender: context.userEmail,
+          receiver: args.friendEmail,
+        });
+        const allRequest = await FriendRequest.aggregate([
+          {
+            $match: {
+              $or: [
+                { receiver: context.userEmail },
+                { sender: context.userEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$receiverInfo" } },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        const { pubsub } = context;
+        pubsub.publish(context.userEmail, {
+          friendRequestActivities: allRequest,
+        });
+        const allFriendsRequest = await FriendRequest.aggregate([
+          {
+            $match: {
+              $or: [
+                { receiver: args.friendEmail },
+                { sender: args.friendEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$receiverInfo" } },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        pubsub.publish(args.friendEmail, {
+          friendRequestActivities: allFriendsRequest,
+        });
+        return "Friend request decline";
+      } catch (error: any) {
+        throw new Error(`Decline friend request failed: ${error.message}`);
       }
     },
     cancelFriendRequest: async (
@@ -325,7 +520,22 @@ const resolvers = {
           receiver: args.friendEmail,
         });
         const allRequest = await FriendRequest.aggregate([
-          { $match: { receiver: context.userEmail } },
+          {
+            $match: {
+              $or: [
+                { receiver: context.userEmail },
+                { sender: context.userEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
           {
             $lookup: {
               from: "users",
@@ -334,15 +544,47 @@ const resolvers = {
               as: "senderInfo",
             },
           },
+          { $unwind: { path: "$receiverInfo" } },
           { $unwind: { path: "$senderInfo" } },
         ]);
         const { pubsub } = context;
         pubsub.publish(context.userEmail, {
           friendRequestActivities: allRequest,
         });
+        const allFriendsRequest = await FriendRequest.aggregate([
+          {
+            $match: {
+              $or: [
+                { receiver: args.friendEmail },
+                { sender: args.friendEmail },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "receiver",
+              foreignField: "email",
+              as: "receiverInfo",
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "sender",
+              foreignField: "email",
+              as: "senderInfo",
+            },
+          },
+          { $unwind: { path: "$receiverInfo" } },
+          { $unwind: { path: "$senderInfo" } },
+        ]);
+        pubsub.publish(args.friendEmail, {
+          friendRequestActivities: allFriendsRequest,
+        });
         return "Friend request cancelled";
       } catch (error: any) {
-        throw new Error(`Accept friend request failed: ${error.message}`);
+        throw new Error(`Cncel friend request failed: ${error.message}`);
       }
     },
     sendMessage: async (
@@ -388,27 +630,44 @@ const resolvers = {
         const sender = await User.findOne({ email: context.userEmail });
         if (!sender) throw new Error("Sender not found");
         // Add reaction to the message
-        let existingReactionAvailable = false;
+        let existingReactionAvailable = false,
+          needToRemoveReaction = false;
         for (const reaction of message.reactions) {
           if (reaction.senderEmail === sender.email) {
+            if (reaction.reactionString === args.reaction) {
+              needToRemoveReaction = true;
+              break;
+            }
             reaction.reactionString = args.reaction;
             existingReactionAvailable = true;
             break;
           }
         }
-        if (!existingReactionAvailable) {
+        if (needToRemoveReaction) {
+          // await Message.findByIdAndUpdate(args.messageId, {
+          //   $pull: {
+          //     reactions: {
+          //       senderEmail: context.userEmail,
+          //     },
+          //   },
+          // });
+          message.reactions.pull({ senderEmail: context.userEmail });
+          // console.log(needToRemoveReaction);
+        } else if (!existingReactionAvailable) {
           message.reactions.push({
             senderEmail: sender.email,
             reactionString: args.reaction,
           });
         }
         await message.save();
+        const updatedMessage = await Message.findById(args.messageId);
+        if (!updatedMessage) throw new Error("Message not found");
         // Optionally, you can publish the updated message to subscribers
-        const chatRoom = await SingleChatRoom.findById(message.roomId);
+        const chatRoom = await SingleChatRoom.findById(updatedMessage.roomId);
         if (!chatRoom) throw new Error("Chat room not found");
         const { pubsub } = context as { pubsub: any };
-        pubsub.publish(message.roomId, { broadcast: message });
-        return message;
+        pubsub.publish(updatedMessage.roomId, { broadcast: updatedMessage });
+        return updatedMessage;
       } catch (error: any) {
         throw new Error(`Send reaction failed: ${error.message}`);
       }
@@ -449,11 +708,13 @@ const resolvers = {
       try {
         const chatRoom = await SingleChatRoom.findById(args.roomId);
         if (!chatRoom) throw new Error("Chat room not found");
+        const message = await Message.findOne({ roomId: args.roomId });
+        // console.log(message);
         await Message.deleteMany({ roomId: args.roomId });
-        // const { pubsub } = context as { pubsub: any };
-        // pubsub.publish(chatRoom._id, {
-        //   clearHistory: { roomId: chatRoom._id, senderEmail: args.senderEmail },
-        // });
+        const { pubsub } = context as { pubsub: any };
+        pubsub.publish(chatRoom._id, {
+          broadcast: message,
+        });
         return "Chat history cleared successfully";
       } catch (error: any) {
         throw new Error(`Clear history failed: ${error.message}`);
@@ -507,7 +768,7 @@ const resolvers = {
           //   },
           // },
         ]);
-        console.log(room);
+        // console.log(room);
         const { pubsub } = context;
         pubsub.publish(args.roomId, { roomActivity: room });
         return room;

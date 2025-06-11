@@ -57,6 +57,7 @@ const typeDefs = `#graphql
   type FriendRequest {
     sender: String!
     receiver: String!
+    receiverInfo: User!
     senderInfo: User!
   }
 
@@ -78,6 +79,7 @@ const typeDefs = `#graphql
     deleteAccount: String!
 
     cancelFriendRequest(friendEmail: String!): String!
+    declineFriendRequest(friendEmail: String!): String!
     makeFriendRequest(friendEmail: String!): String!
     acceptFriendRequest(friendEmail: String!): String!
     blockAUser(userEmail: String!): String!

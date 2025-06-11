@@ -54,10 +54,11 @@ async function createFriendRequest(senderEmail: string, receiverEmail: string) {
   if (alreadyRequestExist) {
     throw new Error("Friend request already exists");
   }
-  await FriendRequest.create({
+  const friendEntry = await FriendRequest.create({
     sender: senderEmail,
     receiver: receiverEmail,
   });
+  await friendEntry.save();
 }
 
 export {
